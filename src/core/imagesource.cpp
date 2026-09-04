@@ -54,7 +54,7 @@ public:
 private:
     struct archive* a_;
     uint64_t pos_ = 0;
-    std::vector<uint8_t> discard_{64 * 1024};
+    std::vector<uint8_t> discard_ = std::vector<uint8_t>(64 * 1024);
 };
 
 }  // namespace

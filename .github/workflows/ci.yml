@@ -36,10 +36,9 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install qt libarchive
 
-      - name: Install libarchive (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: vcpkg install libarchive:x64-windows
+      # libarchive (Windows) is installed automatically via vcpkg manifest mode
+      # (see vcpkg.json) during the Configure step, with default features
+      # disabled to avoid building openssl/libxml2 from source.
 
       # ---- configure ----
       - name: Configure (Linux)

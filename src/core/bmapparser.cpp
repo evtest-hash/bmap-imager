@@ -49,10 +49,12 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
                     *error = QStringLiteral("not a bmap file (root element must be <bmap>)");
                     return false;
                 }
-                bmap.version = xml.attributes().value("version").toString();
-                const int major = bmap.version.section(QLatin1Char('.'), 0, 0).toInt();
+                const QString versionStr =
+                    xml.attributes().value("version").toString();
+                bmap.version = versionStr.toStdString();
+                const int major = versionStr.section(QLatin1Char('.'), 0, 0).toInt();
                 if (major != 2) {
-                    *error = QStringLiteral("unsupported bmap version: %1").arg(bmap.version);
+                    *error = QStringLiteral("unsupported bmap version: %1").arg(versionStr);
                     return false;
                 }
                 sawRoot = true;

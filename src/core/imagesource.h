@@ -11,8 +11,6 @@ class ImageSource {
 public:
     virtual ~ImageSource() = default;
 
-    virtual bool isOpen() const = 0;
-
     // Read up to len bytes. Returns bytes read (0 = EOF), or -1 on error.
     virtual int64_t read(uint8_t* buf, size_t len, std::string* err) = 0;
 

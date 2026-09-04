@@ -5,6 +5,7 @@
 #include "imagesource.h"
 #include "writersink.h"
 
+#include <memory>
 #include <utility>
 
 namespace bmap {
@@ -39,7 +40,8 @@ void FlashWorker::run() {
 
     // 3. Open the (possibly compressed) image.
     std::string serr;
-    ImageSource* src = openImageSource(imagePath_.toStdString(), &serr);
+    std::unique_ptr<ImageSource> src(
+        openImageSource(imagePath_.toStdString(), &serr));
     if (!src) {
         emit flashFinished(false, QString::fromStdString(serr));
         return;
@@ -48,7 +50,6 @@ void FlashWorker::run() {
     // 4. Launch the elevated writer helper.
     WriterSink sink(writerPath_.toStdString(), devicePath_.toStdString());
     if (!sink.open(&serr)) {
-        delete src;
         emit flashFinished(false, QString::fromStdString(serr));
         return;
     }
@@ -57,12 +58,16 @@ void FlashWorker::run() {
     // 5. Copy mapped ranges, verifying checksums and reporting progress.
     CopyOptions opts;
     opts.verifyChecksums = true;
-    opts.progress = [this](double p, bool* cancel) {
-        emit progress(static_cast<int>(p * 100.0));
+    int lastPercent = -1;
+    opts.progress = [this, &lastPercent](double p, bool* cancel) {
+        const int percent = static_cast<int>(p * 100.0);
+        if (percent != lastPercent) {
+            lastPercent = percent;
+            emit progress(percent);
+        }
         *cancel = cancelled_.load();
     };
-    bool ok = Copier::copy(src, bmap, &sink, opts, &serr);
-    delete src;
+    bool ok = Copier::copy(src.get(), bmap, &sink, opts, &serr);
 
     if (ok) {
         ok = sink.close(&serr);

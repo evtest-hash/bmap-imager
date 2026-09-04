@@ -18,9 +18,12 @@ bool WriterSink::open(std::string* err) {
 
 bool WriterSink::writeAt(uint64_t offset, const uint8_t* data, size_t len,
                          std::string* err) {
-    std::string frame;
-    encodeWriteFrame(offset, data, len, &frame);
-    return chan_->send(frame.data(), frame.size(), err);
+    std::string header;
+    encodeWriteHeader(offset, len, &header);
+    if (!chan_->send(header.data(), header.size(), err)) {
+        return false;
+    }
+    return chan_->send(data, len, err);
 }
 
 bool WriterSink::close(std::string* err) {
@@ -37,9 +40,7 @@ bool WriterSink::close(std::string* err) {
         if (msg.compare(0, 4, "ERR ") == 0) {
             msg = msg.substr(4);
         }
-        while (!msg.empty() && (msg.back() == '\n' || msg.back() == '\r')) {
-            msg.pop_back();
-        }
+        msg.erase(msg.find_last_not_of("\r\n") + 1);
         *err = msg.empty() ? "writer failed" : msg;
         return false;
     }

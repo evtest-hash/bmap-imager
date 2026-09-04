@@ -11,7 +11,6 @@ class QDragEnterEvent;
 class QDropEvent;
 class QLabel;
 class QLineEdit;
-class QPlainTextEdit;
 class QProgressBar;
 class QPushButton;
 
@@ -59,7 +58,6 @@ private:
     QLabel* deviceDetailLabel_ = nullptr;
     QLabel* statusLabel_ = nullptr;
     QProgressBar* progressBar_ = nullptr;
-    QPlainTextEdit* logView_ = nullptr;
     QPushButton* flashButton_ = nullptr;
     QPushButton* cancelButton_ = nullptr;
 

@@ -34,7 +34,6 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
     BmapFile bmap;
     bool sawRoot = false;
     bool inBlockMap = false;
-    QString currentElement;
     QString currentText;
     QString currentChecksum;
 
@@ -61,7 +60,6 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
                 continue;
             }
 
-            currentElement = name;
             currentText.clear();
             if (name == QStringLiteral("BlockMap")) {
                 inBlockMap = true;
@@ -111,7 +109,6 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
                 inBlockMap = false;
             }
 
-            currentElement.clear();
             currentText.clear();
         }
     }
@@ -180,9 +177,7 @@ bool BmapParser::verifyFileChecksum(const QString& path, const BmapFile& bmap,
         bytes[idx + i] = '0';
     }
 
-    const QByteArray digest =
-        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
-    if (!checksumsEqual(QString::fromLatin1(digest.toHex()),
+    if (!checksumsEqual(sha256Hex(bytes),
                         QString::fromStdString(bmap.fileChecksum))) {
         *error = QStringLiteral("bmap file checksum verification failed");
         return false;

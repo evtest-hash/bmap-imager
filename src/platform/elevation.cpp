@@ -13,7 +13,6 @@
 #include <QByteArray>
 #include <QProcess>
 #include <QString>
-#include <QStringList>
 #elif defined(Q_OS_WIN)
 #include <windows.h>
 #include <cstdio>
@@ -143,9 +142,9 @@ FrameChannel* runWriterElevated(const std::string& writerPath,
                                 const std::string& devicePath,
                                 std::string* err) {
     auto* proc = new QProcess;
-    QStringList args;
-    args << QString::fromStdString(writerPath) << QString::fromStdString(devicePath);
-    proc->start(QStringLiteral("pkexec"), args);
+    proc->start(QStringLiteral("pkexec"),
+                {QString::fromStdString(writerPath),
+                 QString::fromStdString(devicePath)});
     if (!proc->waitForStarted(5000)) {
         *err = "failed to launch pkexec (is polkit available?)";
         delete proc;

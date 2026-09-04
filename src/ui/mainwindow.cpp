@@ -15,7 +15,6 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMimeData>
-#include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QStringList>
@@ -24,9 +23,32 @@
 
 #include <string>
 
+namespace {
+
+// Compression suffixes libarchive can transparently decompress. The file
+// dialog filter, drop filter, and same-name pairing all derive from this list.
+const QStringList kCompressionSuffixes = {
+    QStringLiteral(".gz"), QStringLiteral(".bz2"), QStringLiteral(".xz"),
+    QStringLiteral(".lzma"), QStringLiteral(".zst")};
+
+bool isImageOrBmapPath(const QString& lowerPath) {
+    if (lowerPath.endsWith(QStringLiteral(".bmap")) ||
+        lowerPath.endsWith(QStringLiteral(".img"))) {
+        return true;
+    }
+    for (const QString& suffix : kCompressionSuffixes) {
+        if (lowerPath.endsWith(suffix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("BmapImager"));
-    resize(640, 520);
+    resize(680, 320);
 
     imageEdit_ = new QLineEdit;
     imageEdit_->setReadOnly(true);
@@ -45,9 +67,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     progressBar_ = new QProgressBar;
     progressBar_->setRange(0, 100);
     progressBar_->setValue(0);
-
-    logView_ = new QPlainTextEdit;
-    logView_->setReadOnly(true);
 
     flashButton_ = new QPushButton(QStringLiteral("Flash"));
     connect(flashButton_, &QPushButton::clicked, this, &MainWindow::startFlash);
@@ -68,23 +87,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // Route drops to the window rather than the text widgets.
     imageEdit_->setAcceptDrops(false);
     bmapEdit_->setAcceptDrops(false);
-    logView_->setAcceptDrops(false);
     setAcceptDrops(true);
 
     auto* central = new QWidget;
     auto* layout = new QVBoxLayout(central);
     layout->addWidget(buildSourceGroup());
     layout->addWidget(buildDeviceGroup());
-
-    auto* progressRow = new QHBoxLayout;
-    progressRow->addWidget(progressBar_, 1);
-    progressRow->addWidget(statusLabel_);
-    layout->addLayout(progressRow);
-
-    layout->addWidget(logView_, 1);
+    layout->addWidget(progressBar_);
 
     auto* buttonRow = new QHBoxLayout;
-    buttonRow->addStretch(1);
+    buttonRow->addWidget(statusLabel_, 1);
     buttonRow->addWidget(cancelButton_);
     buttonRow->addWidget(flashButton_);
     layout->addLayout(buttonRow);
@@ -132,12 +144,7 @@ QWidget* MainWindow::buildDeviceGroup() {
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) {
         for (const QUrl& url : event->mimeData()->urls()) {
-            const QString p = url.toLocalFile().toLower();
-            if (p.endsWith(QStringLiteral(".bmap")) ||
-                p.endsWith(QStringLiteral(".img")) ||
-                p.endsWith(QStringLiteral(".gz")) ||
-                p.endsWith(QStringLiteral(".bz2")) ||
-                p.endsWith(QStringLiteral(".xz"))) {
+            if (isImageOrBmapPath(url.toLocalFile().toLower())) {
                 event->acceptProposedAction();
                 return;
             }
@@ -158,9 +165,16 @@ void MainWindow::dropEvent(QDropEvent* event) {
 }
 
 void MainWindow::browseImage() {
+    QStringList patterns;
+    patterns << QStringLiteral("*.img");
+    for (const QString& suffix : kCompressionSuffixes) {
+        patterns << QStringLiteral("*.img") + suffix;
+    }
+    const QString filter =
+        QStringLiteral("Disk images (%1);;All files (*)")
+            .arg(patterns.join(QLatin1Char(' ')));
     const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("Select image"), QString(),
-        QStringLiteral("Disk images (*.img *.img.gz *.img.bz2 *.img.xz);;All files (*)"));
+        this, QStringLiteral("Select image"), QString(), filter);
     if (!path.isEmpty()) {
         setImage(path);
     }
@@ -193,12 +207,9 @@ void MainWindow::setBmap(const QString& path) {
 
 QString MainWindow::findBmapForImage(const QString& image) const {
     QString stem = image;
-    const QStringList compressions = {QStringLiteral(".gz"), QStringLiteral(".bz2"),
-                                      QStringLiteral(".xz"), QStringLiteral(".lzma"),
-                                      QStringLiteral(".zst")};
-    for (const QString& c : compressions) {
-        if (stem.endsWith(c)) {
-            stem = stem.left(stem.size() - c.size());
+    for (const QString& suffix : kCompressionSuffixes) {
+        if (stem.endsWith(suffix)) {
+            stem = stem.left(stem.size() - suffix.size());
             break;
         }
     }
@@ -211,13 +222,13 @@ QString MainWindow::findImageForBmap(const QString& bmap) const {
     if (stem.endsWith(QStringLiteral(".bmap"))) {
         stem = stem.left(stem.size() - 5);
     }
-    const QStringList candidates = {
-        stem, stem + QStringLiteral(".gz"), stem + QStringLiteral(".bz2"),
-        stem + QStringLiteral(".xz"), stem + QStringLiteral(".lzma"),
-        stem + QStringLiteral(".zst")};
-    for (const QString& c : candidates) {
-        if (QFileInfo(c).exists()) {
-            return c;
+    if (QFileInfo(stem).exists()) {
+        return stem;
+    }
+    for (const QString& suffix : kCompressionSuffixes) {
+        const QString candidate = stem + suffix;
+        if (QFileInfo(candidate).exists()) {
+            return candidate;
         }
     }
     return QString();
@@ -238,7 +249,6 @@ void MainWindow::refreshDevices() {
     statusLabel_->setText(devices_.empty()
                               ? QStringLiteral("no removable device found")
                               : QStringLiteral("%1 device(s)").arg(devices_.size()));
-    updateDeviceDetail(deviceBox_->currentIndex());
 }
 
 void MainWindow::updateDeviceDetail(int index) {
@@ -309,7 +319,6 @@ void MainWindow::startFlash() {
     }
 
     const QString writer = locateWriter();
-    logView_->clear();
     setFlashing(true);
 
     worker_ = new bmap::FlashWorker(image, bmap, device, writer);
@@ -326,7 +335,7 @@ void MainWindow::onProgress(int percent) {
 }
 
 void MainWindow::onLog(const QString& line) {
-    logView_->appendPlainText(line);
+    statusLabel_->setText(line);
 }
 
 void MainWindow::onWorkerFinished(bool success, const QString& message) {

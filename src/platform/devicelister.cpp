@@ -34,6 +34,18 @@ bool runRaw(const QString& program, const QStringList& args, QByteArray* out,
     return true;
 }
 
+// Parse JSON, returning false and setting *err on failure.
+bool parseJson(const QByteArray& json, QJsonDocument* doc, const char* what,
+               std::string* err) {
+    QJsonParseError perr;
+    *doc = QJsonDocument::fromJson(json, &perr);
+    if (perr.error != QJsonParseError::NoError) {
+        *err = std::string(what) + " JSON parse failed";
+        return false;
+    }
+    return true;
+}
+
 // Convert a plist-emitting command's output to a JSON document (macOS).
 bool runPlistAsJson(const QString& program, const QStringList& args,
                     QJsonDocument* doc, std::string* err) {
@@ -55,14 +67,7 @@ bool runPlistAsJson(const QString& program, const QStringList& args,
         *err = "plutil timeout";
         return false;
     }
-    const QByteArray json = p.readAllStandardOutput();
-    QJsonParseError perr;
-    *doc = QJsonDocument::fromJson(json, &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        *err = "plist JSON parse failed";
-        return false;
-    }
-    return true;
+    return parseJson(p.readAllStandardOutput(), doc, "plist", err);
 }
 
 }  // namespace
@@ -136,10 +141,8 @@ bool listLinux(std::vector<Device>* out, std::string* err) {
                 &json, err)) {
         return false;
     }
-    QJsonParseError perr;
-    const QJsonDocument doc = QJsonDocument::fromJson(json, &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        *err = "lsblk JSON parse failed";
+    QJsonDocument doc;
+    if (!parseJson(json, &doc, "lsblk", err)) {
         return false;
     }
     const QJsonArray blocks =
@@ -198,10 +201,8 @@ bool listWindows(std::vector<Device>* out, std::string* err) {
                 &json, err)) {
         return false;
     }
-    QJsonParseError perr;
-    const QJsonDocument doc = QJsonDocument::fromJson(json, &perr);
-    if (perr.error != QJsonParseError::NoError) {
-        *err = "Get-Disk JSON parse failed";
+    QJsonDocument doc;
+    if (!parseJson(json, &doc, "Get-Disk", err)) {
         return false;
     }
     QJsonArray arr;

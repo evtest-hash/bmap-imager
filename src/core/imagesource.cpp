@@ -20,8 +20,6 @@ public:
         }
     }
 
-    bool isOpen() const override { return a_ != nullptr; }
-
     int64_t read(uint8_t* buf, size_t len, std::string* err) override {
         const la_ssize_t n = archive_read_data(a_, buf, len);
         if (n >= 0) {
@@ -37,7 +35,7 @@ public:
             *err = "backward seek not supported (forward-only)";
             return false;
         }
-        std::vector<uint8_t> discard(64 * 1024);
+        std::vector<uint8_t>& discard = discard_;
         while (pos_ < offset) {
             const size_t want = static_cast<size_t>(
                 std::min<uint64_t>(discard.size(), offset - pos_));
@@ -56,6 +54,7 @@ public:
 private:
     struct archive* a_;
     uint64_t pos_ = 0;
+    std::vector<uint8_t> discard_{64 * 1024};
 };
 
 }  // namespace

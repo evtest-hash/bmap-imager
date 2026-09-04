@@ -15,19 +15,19 @@ namespace bmap {
 // prints exactly one result line to stdout: "OK" on success, or
 // "ERR <message>" on failure, before exiting.
 
-// Encode one write frame (header + payload) into `out`.
-inline void encodeWriteFrame(uint64_t offset, const void* data, size_t len,
-                             std::string* out) {
+inline const char kWFramePrefix[] = "W ";
+inline const char kFrameEndToken[] = "END";
+inline const char kFrameEnd[] = "END\n";  // wire form: token + newline
+
+// Encode one write frame header ("W <offset> <length>\n"); the payload is
+// sent separately so it is not copied.
+inline void encodeWriteHeader(uint64_t offset, size_t len, std::string* out) {
     out->clear();
-    out->reserve(64 + len);
-    out->append("W ");
+    out->append(kWFramePrefix);
     out->append(std::to_string(offset));
     out->append(" ");
     out->append(std::to_string(len));
     out->push_back('\n');
-    out->append(static_cast<const char*>(data), len);
 }
-
-inline const char kFrameEnd[] = "END\n";
 
 }  // namespace bmap

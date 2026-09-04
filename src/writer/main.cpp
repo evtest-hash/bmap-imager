@@ -1,4 +1,5 @@
 #include "devicelister.h"
+#include "frame.h"
 #include "rawdevice.h"
 
 #include <cstdio>
@@ -29,10 +30,7 @@ void printResult(const std::string& line) {
 void unmountDevice(const std::string& device) {
 #if defined(__APPLE__)
     // diskutil expects /dev/diskN, not /dev/rdiskN.
-    std::string disk = device;
-    if (disk.rfind("/dev/rdisk", 0) == 0) {
-        disk.replace(0, 10, "/dev/disk");
-    }
+    const std::string disk = rawToBlockDevicePath(device);
     const std::string cmd = "diskutil unmountDisk " + disk + " >/dev/null 2>&1";
     std::system(cmd.c_str());
 #elif defined(__linux__)
@@ -80,10 +78,10 @@ bool readLine(std::string* line) {
 
 // Parse a "W <offset> <length>" header.
 bool parseWriteHeader(const std::string& line, uint64_t* offset, uint64_t* len) {
-    if (line.rfind("W ", 0) != 0) {
+    if (line.rfind(kWFramePrefix, 0) != 0) {
         return false;
     }
-    std::istringstream iss(line.substr(2));
+    std::istringstream iss(line.substr(std::strlen(kWFramePrefix)));
     return static_cast<bool>(iss >> *offset >> *len);
 }
 
@@ -154,11 +152,12 @@ int main(int argc, char** argv) {
 
     // Frame loop: read "W <offset> <len>\n" + payload, write at offset.
     std::string line;
+    std::vector<char> buf;
     while (readLine(&line)) {
         if (line.empty()) {
             continue;
         }
-        if (line == "END") {
+        if (line == kFrameEndToken) {
             break;
         }
 
@@ -172,7 +171,7 @@ int main(int argc, char** argv) {
             printResult("ERR frame too large");
             return 1;
         }
-        std::vector<char> buf(static_cast<size_t>(len));
+        buf.resize(static_cast<size_t>(len));
         if (readBytes(buf.data(), static_cast<size_t>(len)) !=
             static_cast<size_t>(len)) {
             printResult("ERR short frame payload");

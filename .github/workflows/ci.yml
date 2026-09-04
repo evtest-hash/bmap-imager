@@ -64,3 +64,28 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+      # ---- macOS .app (local-confirmation artifact, not a release) ----
+      - name: Assemble macOS .app
+        if: runner.os == 'macOS'
+        run: |
+          APP="build/BmapImager.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp build/src/ui/bmapimager        "$APP/Contents/MacOS/BmapImager"
+          cp build/src/writer/bmap-writer   "$APP/Contents/MacOS/bmap-writer"
+          cp packaging/macOS/Info.plist     "$APP/Contents/Info.plist"
+          printf 'APPL????' > "$APP/Contents/PkgInfo"
+          # Bundle the Qt runtime + Cocoa platform plugin so the app runs on a
+          # machine without Qt installed.
+          macdeployqt "$APP" -verbose=1
+          # Ad-hoc sign (best-effort) so it launches locally without Gatekeeper.
+          codesign --force --deep --sign - "$APP" 2>/dev/null || true
+          (cd build && zip -qr ../BmapImager-macOS.zip BmapImager.app)
+          ls -lh BmapImager-macOS.zip
+
+      - name: Upload macOS .app
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BmapImager-macOS
+          path: BmapImager-macOS.zip

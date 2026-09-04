@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.21)
+project(BmapImager VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Test)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Test)
+find_package(LibArchive REQUIRED)
+
+add_subdirectory(src/core)
+add_subdirectory(tests)

@@ -15,6 +15,7 @@ struct Device {
     std::string path;         // "/dev/rdisk2" / "/dev/sdb" / "\\.\PhysicalDrive2"
     uint64_t sizeBytes = 0;
     std::string description;  // model / media name
+    std::string busType;      // "USB" / "Secure Digital" / "NVMe" ...
     bool removable = false;   // removable media OR external device
 };
 

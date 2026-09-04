@@ -1,11 +1,12 @@
 #include "mainwindow.h"
 
-#include "device.h"
 #include "devicelister.h"
 #include "flashworker.h"
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGroupBox>
@@ -13,12 +14,15 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QStringList>
+#include <QUrl>
 #include <QVBoxLayout>
 
-#include <vector>
+#include <string>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("BmapImager"));
@@ -26,13 +30,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     imageEdit_ = new QLineEdit;
     imageEdit_->setReadOnly(true);
-    imageEdit_->setPlaceholderText(QStringLiteral("select a .img / .img.gz / .img.bz2 / .img.xz"));
+    imageEdit_->setPlaceholderText(
+        QStringLiteral("select or drop a .img / .img.gz / .img.bz2 / .img.xz"));
 
     bmapEdit_ = new QLineEdit;
     bmapEdit_->setReadOnly(true);
-    bmapEdit_->setPlaceholderText(QStringLiteral("select a .bmap file"));
+    bmapEdit_->setPlaceholderText(QStringLiteral("select or drop a .bmap file"));
 
     deviceBox_ = new QComboBox;
+    deviceDetailLabel_ = new QLabel;
+    deviceDetailLabel_->setStyleSheet(QStringLiteral("color: gray;"));
 
     statusLabel_ = new QLabel(QStringLiteral("ready"));
     progressBar_ = new QProgressBar;
@@ -54,6 +61,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             statusLabel_->setText(QStringLiteral("cancelling..."));
         }
     });
+
+    connect(deviceBox_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &MainWindow::updateDeviceDetail);
+
+    // Route drops to the window rather than the text widgets.
+    imageEdit_->setAcceptDrops(false);
+    bmapEdit_->setAcceptDrops(false);
+    logView_->setAcceptDrops(false);
+    setAcceptDrops(true);
 
     auto* central = new QWidget;
     auto* layout = new QVBoxLayout(central);
@@ -102,21 +118,51 @@ QWidget* MainWindow::buildSourceGroup() {
 
 QWidget* MainWindow::buildDeviceGroup() {
     auto* group = new QGroupBox(QStringLiteral("Target device"));
-    auto* layout = new QHBoxLayout(group);
-    layout->addWidget(deviceBox_, 1);
+    auto* layout = new QVBoxLayout(group);
+    auto* row = new QHBoxLayout;
+    row->addWidget(deviceBox_, 1);
     auto* refresh = new QPushButton(QStringLiteral("Refresh"));
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshDevices);
-    layout->addWidget(refresh);
+    row->addWidget(refresh);
+    layout->addLayout(row);
+    layout->addWidget(deviceDetailLabel_);
     return group;
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) {
+        for (const QUrl& url : event->mimeData()->urls()) {
+            const QString p = url.toLocalFile().toLower();
+            if (p.endsWith(QStringLiteral(".bmap")) ||
+                p.endsWith(QStringLiteral(".img")) ||
+                p.endsWith(QStringLiteral(".gz")) ||
+                p.endsWith(QStringLiteral(".bz2")) ||
+                p.endsWith(QStringLiteral(".xz"))) {
+                event->acceptProposedAction();
+                return;
+            }
+        }
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent* event) {
+    for (const QUrl& url : event->mimeData()->urls()) {
+        const QString p = url.toLocalFile();
+        if (p.endsWith(QStringLiteral(".bmap"))) {
+            setBmap(p);
+        } else {
+            setImage(p);
+        }
+    }
+    event->acceptProposedAction();
 }
 
 void MainWindow::browseImage() {
     const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("Select image"),
-        QString(),
+        this, QStringLiteral("Select image"), QString(),
         QStringLiteral("Disk images (*.img *.img.gz *.img.bz2 *.img.xz);;All files (*)"));
     if (!path.isEmpty()) {
-        imageEdit_->setText(path);
+        setImage(path);
     }
 }
 
@@ -125,25 +171,100 @@ void MainWindow::browseBmap() {
         this, QStringLiteral("Select bmap"), QString(),
         QStringLiteral("Bmap files (*.bmap);;All files (*)"));
     if (!path.isEmpty()) {
-        bmapEdit_->setText(path);
+        setBmap(path);
     }
 }
 
+void MainWindow::setImage(const QString& path) {
+    imageEdit_->setText(path);
+    const QString bmap = findBmapForImage(path);
+    if (!bmap.isEmpty()) {
+        bmapEdit_->setText(bmap);
+    }
+}
+
+void MainWindow::setBmap(const QString& path) {
+    bmapEdit_->setText(path);
+    const QString image = findImageForBmap(path);
+    if (!image.isEmpty()) {
+        imageEdit_->setText(image);
+    }
+}
+
+QString MainWindow::findBmapForImage(const QString& image) const {
+    QString stem = image;
+    const QStringList compressions = {QStringLiteral(".gz"), QStringLiteral(".bz2"),
+                                      QStringLiteral(".xz"), QStringLiteral(".lzma"),
+                                      QStringLiteral(".zst")};
+    for (const QString& c : compressions) {
+        if (stem.endsWith(c)) {
+            stem = stem.left(stem.size() - c.size());
+            break;
+        }
+    }
+    const QString candidate = stem + QStringLiteral(".bmap");
+    return QFileInfo(candidate).exists() ? candidate : QString();
+}
+
+QString MainWindow::findImageForBmap(const QString& bmap) const {
+    QString stem = bmap;
+    if (stem.endsWith(QStringLiteral(".bmap"))) {
+        stem = stem.left(stem.size() - 5);
+    }
+    const QStringList candidates = {
+        stem, stem + QStringLiteral(".gz"), stem + QStringLiteral(".bz2"),
+        stem + QStringLiteral(".xz"), stem + QStringLiteral(".lzma"),
+        stem + QStringLiteral(".zst")};
+    for (const QString& c : candidates) {
+        if (QFileInfo(c).exists()) {
+            return c;
+        }
+    }
+    return QString();
+}
+
 void MainWindow::refreshDevices() {
-    std::vector<bmap::Device> devices;
     std::string err;
-    if (!bmap::listDevices(&devices, &err)) {
+    if (!bmap::listDevices(&devices_, &err)) {
         statusLabel_->setText(QString::fromStdString(err));
         return;
     }
     deviceBox_->clear();
-    for (const bmap::Device& d : devices) {
-        const QString label = QString::fromStdString(d.description + " (" + d.id + ")");
+    for (const bmap::Device& d : devices_) {
+        const QString label =
+            QString::fromStdString(d.description + " (" + d.id + ")");
         deviceBox_->addItem(label, QString::fromStdString(d.path));
     }
-    statusLabel_->setText(
-        devices.empty() ? QStringLiteral("no removable device found")
-                        : QStringLiteral("%1 device(s)").arg(devices.size()));
+    statusLabel_->setText(devices_.empty()
+                              ? QStringLiteral("no removable device found")
+                              : QStringLiteral("%1 device(s)").arg(devices_.size()));
+    updateDeviceDetail(deviceBox_->currentIndex());
+}
+
+void MainWindow::updateDeviceDetail(int index) {
+    if (index < 0 || index >= static_cast<int>(devices_.size())) {
+        deviceDetailLabel_->clear();
+        return;
+    }
+    const bmap::Device& d = devices_[static_cast<size_t>(index)];
+    QStringList parts;
+    parts << formatSize(d.sizeBytes);
+    if (!d.busType.empty()) {
+        parts << QString::fromStdString(d.busType);
+    }
+    if (d.removable) {
+        parts << QStringLiteral("removable");
+    }
+    deviceDetailLabel_->setText(parts.join(QStringLiteral(" · ")));
+}
+
+QString MainWindow::formatSize(uint64_t bytes) {
+    const double gb = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+    if (gb >= 1.0) {
+        return QString::number(gb, 'f', 1) + QStringLiteral(" GB");
+    }
+    const double mb = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    return QString::number(mb, 'f', 0) + QStringLiteral(" MB");
 }
 
 QString MainWindow::selectedDevicePath() const {
@@ -172,8 +293,9 @@ void MainWindow::startFlash() {
     const QString bmap = bmapEdit_->text();
     const QString device = selectedDevicePath();
     if (image.isEmpty() || bmap.isEmpty() || device.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("BmapImager"),
-                             QStringLiteral("Select an image, a bmap file, and a target device."));
+        QMessageBox::warning(
+            this, QStringLiteral("BmapImager"),
+            QStringLiteral("Select an image, a bmap file, and a target device."));
         return;
     }
 

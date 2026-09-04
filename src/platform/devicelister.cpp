@@ -115,6 +115,7 @@ bool listMacOS(std::vector<Device>* out, std::string* err) {
         dev.path = ("/dev/r" + id).toStdString();  // raw device for faster writes
         dev.sizeBytes = size;
         dev.description = mediaName.toStdString();
+        dev.busType = info.value(QStringLiteral("BusProtocol")).toString().toStdString();
         dev.removable = removableOrExternal;
         out->push_back(std::move(dev));
     }
@@ -174,6 +175,7 @@ bool listLinux(std::vector<Device>* out, std::string* err) {
         dev.path = ("/dev/" + name).toStdString();
         dev.sizeBytes = size;
         dev.description = model.toStdString();
+        dev.busType = tran.toStdString();
         dev.removable = removable || isSafeBus;
         out->push_back(std::move(dev));
     }
@@ -234,6 +236,7 @@ bool listWindows(std::vector<Device>* out, std::string* err) {
         dev.sizeBytes = size;
         dev.description =
             d.value(QStringLiteral("FriendlyName")).toString().toStdString();
+        dev.busType = bus.toStdString();
         dev.removable = true;
         out->push_back(std::move(dev));
     }

@@ -28,13 +28,13 @@ public:
             pos_ += static_cast<uint64_t>(n);
             return static_cast<int64_t>(n);
         }
-        *err = std::string("解压读取失败: ") + archive_error_string(a_);
+        *err = std::string("decompression read failed: ") + archive_error_string(a_);
         return -1;
     }
 
     bool seek(uint64_t offset, std::string* err) override {
         if (offset < pos_) {
-            *err = "不支持向后 seek(仅前向)";
+            *err = "backward seek not supported (forward-only)";
             return false;
         }
         std::vector<uint8_t> discard(64 * 1024);
@@ -46,7 +46,7 @@ public:
                 return false;
             }
             if (n == 0) {
-                *err = "镜像在预期偏移之前结束";
+                *err = "image ended before expected offset";
                 return false;
             }
         }
@@ -66,7 +66,7 @@ ImageSource* openImageSource(const std::string& path, std::string* err) {
     archive_read_support_format_raw(a);
 
     if (archive_read_open_filename(a, path.c_str(), 10240) != ARCHIVE_OK) {
-        *err = std::string("无法打开镜像: ") + archive_error_string(a);
+        *err = std::string("cannot open image: ") + archive_error_string(a);
         archive_read_free(a);
         return nullptr;
     }

@@ -111,7 +111,7 @@ void TestBmapParser::rejectsUnknownVersion() {
     bmap::BmapFile bf;
     QString err;
     QVERIFY(!bmap::BmapParser::parse(path, &bf, &err));
-    QVERIFY(err.contains(QStringLiteral("版本")));
+    QVERIFY(err.contains(QStringLiteral("version"), Qt::CaseInsensitive));
 }
 
 void TestBmapParser::rejectsZeroBlockSize() {

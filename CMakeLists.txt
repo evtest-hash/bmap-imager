@@ -14,4 +14,6 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Test)
 find_package(LibArchive REQUIRED)
 
 add_subdirectory(src/core)
+add_subdirectory(src/platform)
+add_subdirectory(src/writer)
 add_subdirectory(tests)

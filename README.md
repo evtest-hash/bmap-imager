@@ -1,30 +1,30 @@
 # BmapImager
 
-跨平台 bmap 镜像烧录器(Windows / macOS / Linux)。用 bmap(block map)格式把磁盘镜像快速、可靠地写入 SD 卡或 USB 存储设备——只写有数据的块、逐块 SHA256 校验,替代 `dd`。
+A cross-platform bmap image flasher (Windows / macOS / Linux). Writes disk images to SD cards and USB storage quickly and reliably using the bmap (block map) format: only mapped blocks are written and each is SHA-256 verified — a safer, faster alternative to `dd`.
 
-bmap 生态目前只有命令行工具([`yoctoproject/bmaptool`](https://github.com/yoctoproject/bmaptool),Python),本项目补上缺失的图形界面。
+The bmap ecosystem currently only has a command-line tool ([`yoctoproject/bmaptool`](https://github.com/yoctoproject/bmaptool), Python). This project adds the missing GUI.
 
-## 特性
+## Features
 
-- 解析 bmap v2.0,按映射区段写入,跳过空洞
-- 逐块 SHA256 校验 + bmap 文件自身校验和验证
-- 透明解压 `.img` / `.img.gz` / `.img.bz2` / `.img.xz`(libarchive)
-- 特权边界倒转:普通进程解析/校验/解压,特权 helper 只做 `open + pwrite + fsync`
-- 多层设备安全过滤 + 写入前特权层复验
-- 实时进度、可取消
+- Parses bmap v2.0 and writes only the mapped ranges, skipping holes
+- Per-range SHA-256 verification + bmap file checksum validation
+- Transparent decompression of `.img` / `.img.gz` / `.img.bz2` / `.img.xz` (libarchive)
+- Inverted privilege boundary: the unprivileged process parses/verifies/decompresses; the privileged helper only does `open + pwrite + fsync`
+- Multi-layer device safety filtering + re-validation in the privileged layer
+- Live progress and cancellation
 
-## 架构
+## Architecture
 
 ```
-普通权限进程 (core)                 特权 helper (bmap-writer)
-  解析 bmap → 校验文件校验和          复验设备安全
-  → 逐块解压 → 逐块 SHA256            open(raw device)
-  → {offset, bytes} ──帧协议──▶       pwrite(buf @ off) / fsync
+unprivileged process (core)              privileged helper (bmap-writer)
+  parse bmap → verify file checksum        re-validate device
+  → decompress → per-range SHA-256         open(raw device)
+  → {offset, bytes} ──frame protocol──▶    pwrite(buf @ off) / fsync
 ```
 
-## 构建
+## Building
 
-需要 CMake ≥ 3.21、Qt 6(Core、Widgets、Test)、libarchive。
+Requires CMake ≥ 3.21, Qt 6 (Core, Widgets, Test), and libarchive.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -32,20 +32,20 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-## 项目结构
+## Layout
 
 ```
 src/
-├── core/       # bmapcore 静态库:解析/解压/校验/拷贝(可移植,可测)
-├── platform/   # bmapplatform:设备枚举 / 裸写 / 提权(每 OS)
-├── writer/     # bmap-writer 特权 helper
+├── core/       # bmapcore static library: parse / verify / decompress / copy
+├── platform/   # bmapplatform: device enumeration / raw write / elevation (per-OS)
+├── writer/     # bmap-writer privileged helper
 └── ui/         # Qt Widgets GUI
 tests/          # Qt Test
 ```
 
-## 状态
+## Status
 
-- [x] P0 核心引擎(bmap 解析 + 校验 + 解压 + 拷贝)
-- [ ] P1 平台层 + writer helper(三 OS)
+- [x] P0 core engine (bmap parse + verify + decompress + copy)
+- [ ] P1 platform layer + writer helper (3 OS)
 - [ ] P2 GUI
-- [ ] P3 打包发布
+- [ ] P3 packaging

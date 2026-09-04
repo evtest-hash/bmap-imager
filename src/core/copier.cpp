@@ -43,7 +43,7 @@ bool Copier::copy(ImageSource* src, const BmapFile& bmap, Sink* sink,
             const int64_t n = src->read(buf.data(), want, err);
             if (n <= 0) {
                 if (n == 0) {
-                    *err = "镜像在预期之前结束";
+                    *err = "image ended before expected offset";
                 }
                 return false;
             }
@@ -66,7 +66,7 @@ bool Copier::copy(ImageSource* src, const BmapFile& bmap, Sink* sink,
                                   static_cast<double>(totalBytes),
                               &cancel);
                 if (cancel) {
-                    *err = "已取消";
+                    *err = "cancelled";
                     return false;
                 }
             }
@@ -76,7 +76,7 @@ bool Copier::copy(ImageSource* src, const BmapFile& bmap, Sink* sink,
             const QString actual = QString::fromLatin1(hash.result().toHex());
             if (!checksumsEqual(actual,
                                 QString::fromStdString(range.checksum))) {
-                *err = "校验和校验失败(块 " + std::to_string(range.start) + ")";
+                *err = "checksum mismatch (block " + std::to_string(range.start) + ")";
                 return false;
             }
         }

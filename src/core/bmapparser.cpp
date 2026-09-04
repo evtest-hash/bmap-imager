@@ -25,7 +25,7 @@ bool parseInt(const QString& s, uint64_t* out) {
 bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) {
-        *error = QStringLiteral("无法读取 bmap 文件: %1").arg(path);
+        *error = QStringLiteral("cannot read bmap file: %1").arg(path);
         return false;
     }
 
@@ -46,13 +46,13 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
 
             if (!sawRoot) {
                 if (name != QStringLiteral("bmap")) {
-                    *error = QStringLiteral("不是 bmap 文件(根元素应为 <bmap>)");
+                    *error = QStringLiteral("not a bmap file (root element must be <bmap>)");
                     return false;
                 }
                 bmap.version = xml.attributes().value("version").toString();
                 const int major = bmap.version.section(QLatin1Char('.'), 0, 0).toInt();
                 if (major != 2) {
-                    *error = QStringLiteral("不支持的 bmap 版本: %1").arg(bmap.version);
+                    *error = QStringLiteral("unsupported bmap version: %1").arg(bmap.version);
                     return false;
                 }
                 sawRoot = true;
@@ -97,7 +97,7 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
                     end = start;
                 }
                 if (!ok || start > end) {
-                    *error = QStringLiteral("无效的 Range: %1").arg(t);
+                    *error = QStringLiteral("invalid Range: %1").arg(t);
                     return false;
                 }
                 BmapRange r;
@@ -115,20 +115,20 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
     }
 
     if (xml.hasError()) {
-        *error = QStringLiteral("XML 解析失败: %1").arg(xml.errorString());
+        *error = QStringLiteral("XML parse error: %1").arg(xml.errorString());
         return false;
     }
 
     if (bmap.blockSize == 0) {
-        *error = QStringLiteral("BlockSize 不能为 0");
+        *error = QStringLiteral("BlockSize must not be 0");
         return false;
     }
     if (bmap.blocksCount == 0) {
-        *error = QStringLiteral("BlocksCount 不能为 0");
+        *error = QStringLiteral("BlocksCount must not be 0");
         return false;
     }
     if (bmap.imageSize == 0) {
-        *error = QStringLiteral("ImageSize 不能为 0");
+        *error = QStringLiteral("ImageSize must not be 0");
         return false;
     }
 
@@ -139,7 +139,7 @@ bool BmapParser::parse(const QString& path, BmapFile* out, QString* error) {
 
     for (const BmapRange& r : bmap.ranges) {
         if (r.end >= bmap.blocksCount) {
-            *error = QStringLiteral("Range 越界: %1-%2 (共 %3 块)")
+            *error = QStringLiteral("Range out of bounds: %1-%2 (image has %3 blocks)")
                          .arg(r.start)
                          .arg(r.end)
                          .arg(bmap.blocksCount);
@@ -159,7 +159,8 @@ bool BmapParser::verifyFileChecksum(const QString& path, const BmapFile& bmap,
 
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) {
-        *error = QStringLiteral("无法读取 bmap 文件用于校验: %1").arg(path);
+        *error = QStringLiteral("cannot read bmap file for checksum verification: %1")
+                     .arg(path);
         return false;
     }
     QByteArray bytes = f.readAll();
@@ -170,7 +171,7 @@ bool BmapParser::verifyFileChecksum(const QString& path, const BmapFile& bmap,
         idx = bytes.indexOf(QByteArray::fromStdString(bmap.fileChecksum).toUpper());
     }
     if (idx < 0) {
-        *error = QStringLiteral("BmapFileChecksum 值未在文件中找到");
+        *error = QStringLiteral("BmapFileChecksum value not found in file");
         return false;
     }
     for (int i = 0; i < hex.size(); ++i) {
@@ -181,7 +182,7 @@ bool BmapParser::verifyFileChecksum(const QString& path, const BmapFile& bmap,
         QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
     if (!checksumsEqual(QString::fromLatin1(digest.toHex()),
                         QString::fromStdString(bmap.fileChecksum))) {
-        *error = QStringLiteral("bmap 文件校验和校验失败");
+        *error = QStringLiteral("bmap file checksum verification failed");
         return false;
     }
     return true;

@@ -30,7 +30,7 @@ void printResult(const std::string& line) {
 void unmountDevice(const std::string& device) {
 #if defined(__APPLE__)
     // diskutil expects /dev/diskN, not /dev/rdiskN.
-    const std::string disk = rawToBlockDevicePath(device);
+    const std::string disk = bmap::rawToBlockDevicePath(device);
     const std::string cmd = "diskutil unmountDisk " + disk + " >/dev/null 2>&1";
     std::system(cmd.c_str());
 #elif defined(__linux__)
@@ -78,10 +78,10 @@ bool readLine(std::string* line) {
 
 // Parse a "W <offset> <length>" header.
 bool parseWriteHeader(const std::string& line, uint64_t* offset, uint64_t* len) {
-    if (line.rfind(kWFramePrefix, 0) != 0) {
+    if (line.rfind(bmap::kWFramePrefix, 0) != 0) {
         return false;
     }
-    std::istringstream iss(line.substr(std::strlen(kWFramePrefix)));
+    std::istringstream iss(line.substr(std::strlen(bmap::kWFramePrefix)));
     return static_cast<bool>(iss >> *offset >> *len);
 }
 
@@ -157,7 +157,7 @@ int main(int argc, char** argv) {
         if (line.empty()) {
             continue;
         }
-        if (line == kFrameEndToken) {
+        if (line == bmap::kFrameEndToken) {
             break;
         }
 

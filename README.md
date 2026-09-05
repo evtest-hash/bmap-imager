@@ -8,10 +8,12 @@ The bmap ecosystem currently only has a command-line tool ([`yoctoproject/bmapto
 
 - Parses bmap v2.0 and writes only the mapped ranges, skipping holes
 - Per-range SHA-256 verification + bmap file checksum validation
-- Transparent decompression of `.img` / `.img.gz` / `.img.bz2` / `.img.xz` (libarchive)
+- Transparent decompression via libarchive: `.img`, `.img.gz`, `.img.bz2`, `.img.xz`, `.img.lzma`, `.img.zst`
 - Inverted privilege boundary: the unprivileged process parses/verifies/decompresses; the privileged helper only does `open + pwrite + fsync`
-- Multi-layer device safety filtering + re-validation in the privileged layer
+- Multi-layer device safety filtering + re-validation in the privileged layer before writing
 - Live progress and cancellation
+- Drag-and-drop image/bmap files
+- Device detail (capacity / bus type) and same-name img/bmap auto-pairing
 
 ## Architecture
 
@@ -21,6 +23,8 @@ unprivileged process (core)              privileged helper (bmap-writer)
   → decompress → per-range SHA-256         open(raw device)
   → {offset, bytes} ──frame protocol──▶    pwrite(buf @ off) / fsync
 ```
+
+The privileged helper (`bmap-writer`) is a small CLI that only opens the raw device and writes verified bytes. It never parses the bmap or decompresses the image, so a malformed bmap can only crash the unprivileged process, never the root helper.
 
 ## Building
 
@@ -32,6 +36,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
+On Windows, libarchive is installed automatically via vcpkg manifest mode (see `vcpkg.json`) with default features disabled to keep the build fast.
+
 ## Layout
 
 ```
@@ -41,11 +47,12 @@ src/
 ├── writer/     # bmap-writer privileged helper
 └── ui/         # Qt Widgets GUI
 tests/          # Qt Test
+packaging/      # macOS .app Info.plist
 ```
 
 ## Status
 
 - [x] P0 core engine (bmap parse + verify + decompress + copy)
-- [ ] P1 platform layer + writer helper (3 OS)
-- [ ] P2 GUI
-- [ ] P3 packaging
+- [x] P1 platform layer + writer helper (Windows / macOS / Linux)
+- [x] P2 Qt Widgets GUI
+- [ ] P3 packaging & release — macOS `.app` is assembled and passes CI; not yet released

@@ -1,0 +1,11 @@
+2026-09-07 11:47:49,832 - aqt.helper - DEBUG - helper 8365121856 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_684/qt6_684/Updates.xml.sha256
+2026-09-07 11:47:52,180 - aqt.helper - DEBUG - helper 8365121856 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_684/qt6_684/Updates.xml.sha256
+2026-09-07 11:47:53,841 - aqt.helper - DEBUG - helper 8365121856 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_684/qt6_684/Updates.xml.sha256
+2026-09-07 11:47:55,640 - aqt.helper - DEBUG - helper 8365121856 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_684/qt6_684/Updates.xml.sha256
+2026-09-07 11:47:57,270 - aqt.helper - DEBUG - helper 8365121856 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_684/qt6_684/Updates.xml.sha256
+2026-09-07 11:47:58,942 - aqt.main - ERROR - installer 8365121856 Failed to download checksum for the file 'Updates.xml' from mirrors '['https://download.qt.io']
+==============================Suggested follow-up:==============================
+* Check your internet connection
+* Consider modifying `requests.max_retries_to_retrieve_hash` in settings.ini
+* Consider modifying `mirrors.trusted_mirrors` in settings.ini (see https://aqtinstall.readthedocs.io/en/stable/configuration.html#configuration)
+* Please use 'aqt list-qt mac desktop' to show versions of Qt available.

@@ -22,14 +22,17 @@ jobs:
       # manager. Homebrew bottles are built for the runner's own OS, so a
       # brew Qt from a macos-26 runner produces frameworks with minos 26 that
       # will not load on any older Mac. The official builds target macOS 12.
-      # 6.8 LTS, not 6.6: Qt 6.6's CMake config still lists the AGL framework,
-      # which current macOS SDKs no longer ship, so linking fails on the
-      # runner. 6.8 dropped that dependency and still targets macOS 12.
+      # Pinned exactly, and not below 6.9.2, because of QTBUG-137687: Qt's
+      # FindWrapOpenGL.cmake links the AGL framework, which the macOS 26 SDK
+      # on the runner no longer ships, so anything older fails with
+      # "ld: framework 'AGL' not found". The fix also landed in 6.8.4, but the
+      # 6.8 LTS series stops at 6.8.3 on aqtinstall. 6.9.3 still targets
+      # macOS 12, so the deployment floor below is unaffected.
       - name: Install Qt (Windows / macOS)
         if: runner.os != 'Linux'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.*'
+          version: '6.9.3'
           cache: true
 
       # ---- dependencies ----

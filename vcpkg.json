@@ -5,12 +5,7 @@
     {
       "name": "libarchive",
       "default-features": false,
-      "features": ["bzip2", "lzma"]
-    },
-    {
-      "name": "libarchive",
-      "features": ["zstd"],
-      "platform": "osx"
+      "features": ["bzip2", "lzma", "zstd"]
     }
   ]
 }

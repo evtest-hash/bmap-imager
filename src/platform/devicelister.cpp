@@ -91,7 +91,7 @@ bool listMacOS(std::vector<Device>* out, std::string* err) {
         const QString id = d.value(QStringLiteral("DeviceIdentifier")).toString();
         const uint64_t size =
             static_cast<uint64_t>(d.value(QStringLiteral("Size")).toDouble());
-        if (size == 0 || size > kMaxDeviceBytes) {
+        if (size == 0) {
             continue;
         }
 
@@ -104,24 +104,32 @@ bool listMacOS(std::vector<Device>* out, std::string* err) {
         }
         const QJsonObject info = infoDoc.object();
         const bool internal = info.value(QStringLiteral("Internal")).toBool();
-        const bool removableOrExternal =
-            info.value(QStringLiteral("RemovableMediaOrExternalDevice")).toBool();
+        const bool removable =
+            info.value(QStringLiteral("RemovableMedia")).toBool() ||
+            info.value(QStringLiteral("Ejectable")).toBool();
         const QString mediaName = info.value(QStringLiteral("MediaName")).toString();
+        const QString busProtocol =
+            info.value(QStringLiteral("BusProtocol")).toString();
         const QString virt =
             info.value(QStringLiteral("VirtualOrPhysical")).toString();
 
-        if (internal) continue;
-        if (!removableOrExternal) continue;
+        // A card in a built-in reader reports Internal=true, because the
+        // *reader* is internal -- the media is still removable. Treating
+        // "internal" as disqualifying on its own hid every SD card slotted
+        // into a Mac, which is the most common target this tool has.
+        const bool isCard = busProtocol == QStringLiteral("Secure Digital");
+
         if (virt.contains(QStringLiteral("Virtual"), Qt::CaseInsensitive)) continue;
-        if (mediaName.toLower().contains(QStringLiteral("apple"))) continue;
+        // System disk = internal, non-removable media, and not a card.
+        if (internal && !removable && !isCard) continue;
 
         Device dev;
         dev.id = id.toStdString();
         dev.path = ("/dev/r" + id).toStdString();  // raw device for faster writes
         dev.sizeBytes = size;
         dev.description = mediaName.toStdString();
-        dev.busType = info.value(QStringLiteral("BusProtocol")).toString().toStdString();
-        dev.removable = removableOrExternal;
+        dev.busType = busProtocol.toStdString();
+        dev.removable = removable;
         out->push_back(std::move(dev));
     }
     return true;
@@ -163,7 +171,7 @@ bool listLinux(std::vector<Device>* out, std::string* err) {
         }
         const uint64_t size =
             static_cast<uint64_t>(d.value(QStringLiteral("size")).toDouble());
-        if (size == 0 || size > kMaxDeviceBytes) {
+        if (size == 0) {
             continue;
         }
 
@@ -226,7 +234,7 @@ bool listWindows(std::vector<Device>* out, std::string* err) {
         }
         const uint64_t size =
             static_cast<uint64_t>(d.value(QStringLiteral("Size")).toDouble());
-        if (size == 0 || size > kMaxDeviceBytes) {
+        if (size == 0) {
             continue;
         }
 

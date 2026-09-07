@@ -65,6 +65,31 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+      # ---- UI screenshot ----
+      # Renders the main window headlessly on each platform and uploads it, so
+      # UI changes can be reviewed without a local Qt install. The offscreen
+      # platform plugin needs no display server, and since the app forces the
+      # Fusion style the render matches what a real desktop would show.
+      - name: Render UI screenshot (Unix)
+        if: runner.os != 'Windows'
+        run: ./build/src/ui/bmapimager -platform offscreen --screenshot "ui-${{ runner.os }}.png"
+
+      - name: Render UI screenshot (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = "build/src/ui/Release/bmapimager.exe"
+          if (-not (Test-Path $exe)) { $exe = "build/src/ui/bmapimager.exe" }
+          & $exe -platform offscreen --screenshot "ui-Windows.png"
+          if ($LASTEXITCODE -ne 0) { throw "screenshot failed ($LASTEXITCODE)" }
+
+      - name: Upload UI screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-${{ runner.os }}
+          path: ui-*.png
+          if-no-files-found: error
+
       # ---- macOS .app (local-confirmation artifact, not a release) ----
       - name: Assemble macOS .app
         if: runner.os == 'macOS'

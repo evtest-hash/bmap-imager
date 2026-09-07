@@ -9,6 +9,7 @@
 class QComboBox;
 class QDragEnterEvent;
 class QDropEvent;
+class QEvent;
 class QLabel;
 class QLineEdit;
 class QProgressBar;
@@ -23,9 +24,15 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
+    // Fill the window with placeholder content. Dev-only: used by the
+    // --screenshot render so CI produces a populated window, not an empty one.
+    void loadSampleState();
+
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    // Re-applies accents when the system flips between light and dark.
+    void changeEvent(QEvent* event) override;
 
 private slots:
     void browseImage();
@@ -38,8 +45,10 @@ private slots:
     void onWorkerFinished(bool success, const QString& message);
 
 private:
-    QWidget* buildSourceGroup();
-    QWidget* buildDeviceGroup();
+    QWidget* buildSourceSection();
+    QWidget* buildDeviceSection();
+    // (Re)applies theme colors to the widgets this window owns.
+    void applyAccents();
     QString selectedDevicePath() const;
     QString locateWriter() const;
     void setFlashing(bool flashing);
@@ -55,11 +64,15 @@ private:
     QLineEdit* imageEdit_ = nullptr;
     QLineEdit* bmapEdit_ = nullptr;
     QComboBox* deviceBox_ = nullptr;
-    QLabel* deviceDetailLabel_ = nullptr;
+    QLabel* deviceSizeLabel_ = nullptr;
+    QLabel* deviceMetaLabel_ = nullptr;
     QLabel* statusLabel_ = nullptr;
     QProgressBar* progressBar_ = nullptr;
     QPushButton* flashButton_ = nullptr;
     QPushButton* cancelButton_ = nullptr;
+
+    // Labels drawn in the secondary text color; re-tinted on a theme change.
+    std::vector<QLabel*> mutedLabels_;
 
     std::vector<bmap::Device> devices_;
     bmap::FlashWorker* worker_ = nullptr;

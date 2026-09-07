@@ -2,14 +2,18 @@
 
 #include "devicelister.h"
 #include "flashworker.h"
+#include "theme.h"
 
 #include <QApplication>
 #include <QComboBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QGroupBox>
+#include <QFont>
+#include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -48,7 +52,7 @@ bool isImageOrBmapPath(const QString& lowerPath) {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("BmapImager"));
-    resize(680, 320);
+    resize(620, 390);
 
     imageEdit_ = new QLineEdit;
     imageEdit_->setReadOnly(true);
@@ -60,15 +64,36 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     bmapEdit_->setPlaceholderText(QStringLiteral("select or drop a .bmap file"));
 
     deviceBox_ = new QComboBox;
-    deviceDetailLabel_ = new QLabel;
-    deviceDetailLabel_->setStyleSheet(QStringLiteral("color: gray;"));
+
+    // Capacity is the number that decides whether you picked the right disk,
+    // so it gets the strongest position; everything else is secondary.
+    deviceSizeLabel_ = new QLabel(QStringLiteral("—"));
+    QFont sizeFont = deviceSizeLabel_->font();
+    if (sizeFont.pointSizeF() > 0) {
+        sizeFont.setPointSizeF(sizeFont.pointSizeF() * 1.25);
+    }
+    sizeFont.setWeight(QFont::DemiBold);
+    deviceSizeLabel_->setFont(sizeFont);
+
+    deviceMetaLabel_ = new QLabel;
+    QFont metaFont = deviceMetaLabel_->font();
+    if (metaFont.pointSizeF() > 0) {
+        metaFont.setPointSizeF(metaFont.pointSizeF() * 0.9);
+    }
+    deviceMetaLabel_->setFont(metaFont);
+    mutedLabels_.push_back(deviceMetaLabel_);
 
     statusLabel_ = new QLabel(QStringLiteral("ready"));
+    mutedLabels_.push_back(statusLabel_);
+
     progressBar_ = new QProgressBar;
     progressBar_->setRange(0, 100);
     progressBar_->setValue(0);
+    progressBar_->setTextVisible(false);
+    progressBar_->setFixedHeight(10);
 
     flashButton_ = new QPushButton(QStringLiteral("Flash"));
+    flashButton_->setDefault(true);
     connect(flashButton_, &QPushButton::clicked, this, &MainWindow::startFlash);
 
     cancelButton_ = new QPushButton(QStringLiteral("Cancel"));
@@ -91,54 +116,105 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     auto* central = new QWidget;
     auto* layout = new QVBoxLayout(central);
-    layout->addWidget(buildSourceGroup());
-    layout->addWidget(buildDeviceGroup());
+    layout->setContentsMargins(18, 18, 18, 18);
+    layout->setSpacing(17);
+    layout->addWidget(buildSourceSection());
+    layout->addWidget(buildDeviceSection());
+    layout->addStretch(1);
     layout->addWidget(progressBar_);
 
     auto* buttonRow = new QHBoxLayout;
+    buttonRow->setSpacing(8);
     buttonRow->addWidget(statusLabel_, 1);
     buttonRow->addWidget(cancelButton_);
     buttonRow->addWidget(flashButton_);
     layout->addLayout(buttonRow);
 
     setCentralWidget(central);
+    applyAccents();
     refreshDevices();
 }
 
-QWidget* MainWindow::buildSourceGroup() {
-    auto* group = new QGroupBox(QStringLiteral("Source"));
-    auto* layout = new QVBoxLayout(group);
+QWidget* MainWindow::buildSourceSection() {
+    auto* section = new QWidget;
+    auto* layout = new QVBoxLayout(section);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(9);
+    auto* eyebrow = bmap::theme::makeEyebrow(QStringLiteral("Source"));
+    mutedLabels_.push_back(eyebrow);
+    layout->addWidget(eyebrow);
 
-    auto* imageRow = new QHBoxLayout;
-    imageRow->addWidget(new QLabel(QStringLiteral("Image")));
-    imageRow->addWidget(imageEdit_, 1);
-    auto* imageBtn = new QPushButton(QStringLiteral("Browse..."));
-    connect(imageBtn, &QPushButton::clicked, this, &MainWindow::browseImage);
-    imageRow->addWidget(imageBtn);
-    layout->addLayout(imageRow);
+    auto* form = new QFormLayout;
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setHorizontalSpacing(10);
+    form->setVerticalSpacing(8);
+    form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
-    auto* bmapRow = new QHBoxLayout;
-    bmapRow->addWidget(new QLabel(QStringLiteral("Bmap")));
-    bmapRow->addWidget(bmapEdit_, 1);
-    auto* bmapBtn = new QPushButton(QStringLiteral("Browse..."));
-    connect(bmapBtn, &QPushButton::clicked, this, &MainWindow::browseBmap);
-    bmapRow->addWidget(bmapBtn);
-    layout->addLayout(bmapRow);
+    const auto addRow = [this, form](const QString& label, QLineEdit* edit,
+                                     void (MainWindow::*slot)()) {
+        auto* row = new QHBoxLayout;
+        row->setSpacing(8);
+        row->addWidget(edit, 1);
+        auto* browse = new QPushButton(QStringLiteral("Browse..."));
+        connect(browse, &QPushButton::clicked, this, slot);
+        row->addWidget(browse);
+        form->addRow(label, row);
+    };
+    addRow(QStringLiteral("Image"), imageEdit_, &MainWindow::browseImage);
+    addRow(QStringLiteral("Bmap"), bmapEdit_, &MainWindow::browseBmap);
 
-    return group;
+    layout->addLayout(form);
+    return section;
 }
 
-QWidget* MainWindow::buildDeviceGroup() {
-    auto* group = new QGroupBox(QStringLiteral("Target device"));
-    auto* layout = new QVBoxLayout(group);
+QWidget* MainWindow::buildDeviceSection() {
+    auto* section = new QWidget;
+    auto* layout = new QVBoxLayout(section);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(9);
+    auto* eyebrow = bmap::theme::makeEyebrow(QStringLiteral("Target device"));
+    mutedLabels_.push_back(eyebrow);
+    layout->addWidget(eyebrow);
+
     auto* row = new QHBoxLayout;
+    row->setSpacing(8);
     row->addWidget(deviceBox_, 1);
     auto* refresh = new QPushButton(QStringLiteral("Refresh"));
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshDevices);
     row->addWidget(refresh);
     layout->addLayout(row);
-    layout->addWidget(deviceDetailLabel_);
-    return group;
+
+    // StyledPanel is drawn by the style itself, so the card needs no style
+    // sheet and stays correct in both light and dark palettes.
+    auto* card = new QFrame;
+    card->setFrameShape(QFrame::StyledPanel);
+    auto* cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(12, 9, 12, 10);
+    cardLayout->setSpacing(2);
+    cardLayout->addWidget(deviceSizeLabel_);
+    cardLayout->addWidget(deviceMetaLabel_);
+    layout->addWidget(card);
+
+    return section;
+}
+
+void MainWindow::applyAccents() {
+    for (QLabel* label : mutedLabels_) {
+        bmap::theme::makeMuted(label);
+    }
+    bmap::theme::makeAccent(progressBar_);
+    bmap::theme::makeDanger(flashButton_);
+}
+
+void MainWindow::changeEvent(QEvent* event) {
+    QMainWindow::changeEvent(event);
+    // The system flipped between light and dark: our per-widget accents are
+    // computed from the palette, so they have to be recomputed.
+    if (event->type() == QEvent::PaletteChange ||
+        event->type() == QEvent::ApplicationPaletteChange) {
+        applyAccents();
+    }
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
@@ -253,19 +329,46 @@ void MainWindow::refreshDevices() {
 
 void MainWindow::updateDeviceDetail(int index) {
     if (index < 0 || index >= static_cast<int>(devices_.size())) {
-        deviceDetailLabel_->clear();
+        deviceSizeLabel_->setText(QStringLiteral("—"));
+        deviceMetaLabel_->clear();
         return;
     }
     const bmap::Device& d = devices_[static_cast<size_t>(index)];
+    deviceSizeLabel_->setText(formatSize(d.sizeBytes));
+
     QStringList parts;
-    parts << formatSize(d.sizeBytes);
     if (!d.busType.empty()) {
         parts << QString::fromStdString(d.busType);
     }
     if (d.removable) {
         parts << QStringLiteral("removable");
     }
-    deviceDetailLabel_->setText(parts.join(QStringLiteral(" · ")));
+    parts << QString::fromStdString(d.path);
+    deviceMetaLabel_->setText(parts.join(QStringLiteral(" · ")));
+}
+
+void MainWindow::loadSampleState() {
+    imageEdit_->setText(
+        QStringLiteral("core-image-minimal-raspberrypi4-64.wic.gz"));
+    bmapEdit_->setText(
+        QStringLiteral("core-image-minimal-raspberrypi4-64.wic.bmap"));
+
+    bmap::Device sample;
+    sample.id = "disk4";
+    sample.path = "/dev/rdisk4";
+    sample.sizeBytes = 31914983424ull;  // 29.7 GB
+    sample.description = "SanDisk Ultra";
+    sample.busType = "USB";
+    sample.removable = true;
+    devices_.assign(1, sample);
+
+    deviceBox_->clear();
+    deviceBox_->addItem(QStringLiteral("SanDisk Ultra (disk4)"),
+                        QString::fromStdString(sample.path));
+    updateDeviceDetail(0);
+
+    progressBar_->setValue(62);
+    statusLabel_->setText(QStringLiteral("flashing..."));
 }
 
 QString MainWindow::formatSize(uint64_t bytes) {

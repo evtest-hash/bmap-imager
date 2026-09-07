@@ -2,6 +2,7 @@ add_executable(bmapimager
   main.cpp
   mainwindow.cpp
   flashworker.cpp
+  theme.cpp
 )
 
 target_link_libraries(bmapimager PRIVATE

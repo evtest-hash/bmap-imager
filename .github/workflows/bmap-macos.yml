@@ -1,0 +1,58 @@
+name: bmap macOS
+
+# First goal on this branch: prove the upstream tree builds with a stock Qt,
+# before changing any of it. Upstream's own macOS path builds Qt from source
+# (qt/build-qt-macos.sh); CONTRIBUTING.md says any Qt 6 satisfying the
+# find_package(Qt6 6.9) minimum in src/CMakeLists.txt will also configure, so
+# this uses the official 6.9.3 build instead. The vendored third-party trees
+# are left uninitialised on purpose: src/dependencies/fetch-vendor.cmake falls
+# back to FetchContent when a vendor tree is missing.
+
+on:
+  push:
+    branches: [bmap-on-rpi]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.3'
+          modules: 'qt5compat qtimageformats qtshadertools'
+          cache: true
+
+      - name: Install build tools
+        run: brew install ninja
+
+      # The FetchContent trees (curl, libarchive, zstd, xz, zlib, nghttp2,
+      # libusb) are all built from source, so cache them across runs.
+      - name: Cache fetched dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('src/dependencies/**') }}
+          restore-keys: deps-${{ runner.os }}-
+
+      - name: Configure
+        run: >
+          cmake -B build -G Ninja src
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Show what was produced
+        if: always()
+        run: |
+          echo "--- app bundles ---"
+          find build -maxdepth 3 -name '*.app' -print 2>/dev/null || true
+          echo "--- executables ---"
+          find build -maxdepth 2 -type f -perm +111 -print 2>/dev/null | head -20 || true

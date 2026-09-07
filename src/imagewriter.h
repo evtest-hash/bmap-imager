@@ -659,6 +659,9 @@ protected:
     void _continueStartWriteAfterCacheVerification(bool cacheIsValid);
     void scheduleOsListRefresh();
     void _handleMemoryAllocationFailure(const char* what);
+    // Attach the image's .bmap to the write thread, if it has one.
+    void _attachBlockMap(const QString &imageUrl);
+
     void _handleSetupException(const char* what);
 };
 

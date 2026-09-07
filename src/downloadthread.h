@@ -21,6 +21,8 @@
 #include <curl/curl.h>
 #include "acceleratedcryptographichash.h"
 #include "imageadvancedoptions.h"
+#include "fastboot/bmap.h"
+#include <memory>
 #include "systemmemorymanager.h"
 #include "file_operations.h"
 #include "asynccachewriter.h"
@@ -183,7 +185,14 @@ public:
     // buffer until onComplete is called.
     // If onComplete is null or async is disabled, the buffer can be reused after return.
     size_t _writeFileZeroSkip(const char *buf, size_t len);
+    // Same shape as _writeFileZeroSkip, but what gets skipped comes from the
+    // image's own block map rather than from inspecting the bytes.
+    size_t _writeFileBmapSkip(const char *buf, size_t len);
     size_t _writeFile(const char *buf, size_t len, WriteCompleteCallback onComplete = nullptr);
+
+    // Drive skipping from a parsed .bmap instead of scanning for zero blocks.
+    // Takes ownership; must be called before the thread starts.
+    void setBlockMap(std::unique_ptr<fastboot::BlockMap> blockMap);
 
 signals:
     void success();
@@ -283,6 +292,9 @@ protected:
     CURL *_c;
     curl_off_t _startOffset;
     std::atomic<std::uint64_t> _lastDlTotal, _lastDlNow, _extractTotal, _verifyTotal, _lastVerifyNow, _bytesWritten;
+
+    // Set when the image ships a .bmap; null otherwise.
+    std::unique_ptr<fastboot::BlockMap> _blockMap;
     std::uint64_t _lastFailureOffset;
     qint64 _sectorsStart;
     QByteArray _url, _useragent, _buf, _filename, _lastError, _expectedHash, _config, _cmdline, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat;

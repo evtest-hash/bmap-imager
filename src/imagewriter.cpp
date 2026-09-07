@@ -5,6 +5,9 @@
 
 #include "downloadextractthread.h"
 #include "imagewriter.h"
+#include "fastboot/bmap.h"
+#include <memory>
+#include <string_view>
 #include "imager_version.h"
 #include "writeprogresswatchdog.h"
 #include "embedded_config.h"
@@ -570,6 +573,69 @@ void ImageWriter::setEngine(QQmlApplicationEngine *engine)
 }
 
 /* Set URL to download from */
+/*
+ * Attach the image's block map, when it has one.
+ *
+ * The bmap is looked for in two places, in order: the URL the caller supplied
+ * via setSrc(), and a sibling of the image named <stem>.bmap -- the convention
+ * bmaptool and Yocto both follow, so a locally selected .img usually pairs
+ * itself without the user having to say so.
+ *
+ * A missing or unparseable bmap is not an error: the write falls back to
+ * scanning for zero blocks, which is what happens for every image today.
+ */
+void ImageWriter::_attachBlockMap(const QString &imageUrl)
+{
+    if (!_thread)
+        return;
+
+    QString path;
+    if (!_bmapUrl.isEmpty()) {
+        const QUrl u(_bmapUrl);
+        path = u.isLocalFile() ? u.toLocalFile() : QString();
+    }
+    if (path.isEmpty()) {
+        const QUrl img(imageUrl);
+        if (img.isLocalFile()) {
+            QString stem = img.toLocalFile();
+            // Strip one compression suffix, so foo.img.gz pairs with foo.img.bmap
+            for (const QString &suffix : {QStringLiteral(".gz"), QStringLiteral(".bz2"),
+                                          QStringLiteral(".xz"), QStringLiteral(".lzma"),
+                                          QStringLiteral(".zst")}) {
+                if (stem.endsWith(suffix)) {
+                    stem.chop(suffix.size());
+                    break;
+                }
+            }
+            const QString candidate = stem + QStringLiteral(".bmap");
+            if (QFileInfo::exists(candidate))
+                path = candidate;
+        }
+    }
+    if (path.isEmpty())
+        return;
+
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        qWarning() << "bmap: cannot read" << path;
+        return;
+    }
+    const QByteArray xml = f.readAll();
+
+    auto map = std::make_unique<fastboot::BlockMap>();
+    std::string parseError;
+    if (!map->parse(std::string_view(xml.constData(), xml.size()), &parseError)) {
+        qWarning() << "bmap: parse failed for" << path
+                   << QString::fromStdString(parseError);
+        return;
+    }
+
+    qDebug() << "bmap:" << path << "-" << map->ranges().size() << "ranges,"
+             << map->mappedBlockCount() << "of" << map->blockCount()
+             << "blocks mapped, block size" << map->blockSize();
+    _thread->setBlockMap(std::move(map));
+}
+
 void ImageWriter::setSrc(const QUrl &url, quint64 downloadLen, quint64 extrLen, QByteArray expectedHash, bool multifilesinzip, QString parentcategory, QString osname, QByteArray initFormat, QString releaseDate, QString bmapUrl)
 {
     _src = url;
@@ -1364,6 +1430,7 @@ void ImageWriter::startWrite()
         if (QUrl(urlstr).isLocalFile())
         {
             _thread = new LocalFileExtractThread(urlstr, writeDevicePath.toLatin1(), _expectedHash, this);
+            _attachBlockMap(urlstr);
         }
         else
         {
@@ -4580,6 +4647,7 @@ void ImageWriter::_continueStartWriteAfterCacheVerification(bool cacheIsValid)
         QString writeDevicePath = PlatformQuirks::getWriteDevicePath(_dst);
         try {
             _thread = new LocalFileExtractThread(urlstr.toLatin1(), writeDevicePath.toLatin1(), _expectedHash, this);
+            _attachBlockMap(urlstr);
         } catch (const std::bad_alloc& e) {
             _handleMemoryAllocationFailure(e.what());
             return;

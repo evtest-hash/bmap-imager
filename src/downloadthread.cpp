@@ -875,6 +875,8 @@ size_t DownloadThread::_writeData(const char *buf, size_t len)
 
     if (!_filename.isEmpty())
     {
+        if (_blockMap && !_blockMap->empty())
+            return _writeFileBmapSkip(buf, len);
         return _writeFileZeroSkip(buf, len);
     }
     else
@@ -967,6 +969,98 @@ void DownloadThread::_hashData(const char *buf, size_t len)
  * When verification is active, skipped (non-written) zero regions would
  * still contain stale data from the previous image, causing a hash mismatch.
  */
+void DownloadThread::setBlockMap(std::unique_ptr<fastboot::BlockMap> blockMap)
+{
+    _blockMap = std::move(blockMap);
+}
+
+/*
+ * Write only the blocks the image's .bmap marks as mapped, seeking over the
+ * rest.
+ *
+ * This is the same shape as _writeFileZeroSkip below, with one difference
+ * that is the whole point of a bmap: the decision comes from the map rather
+ * than from reading the bytes. That means holes are skipped even when they
+ * are not all-zero, nothing is spent scanning, and what gets skipped is what
+ * the image's producer declared rather than what this pass happened to
+ * observe.
+ *
+ * Writes arrive strictly sequentially from offset 0, so the file offset is
+ * the image offset and divides straight into a block number.
+ */
+size_t DownloadThread::_writeFileBmapSkip(const char *buf, size_t len)
+{
+    // The first block is held back and written last (see run()); until it has
+    // been captured there is no stable offset to reason about.
+    if (!_firstBlock)
+        return _writeFile(buf, len);
+
+    // A whole-image hash is checked by reading every byte back, which cannot
+    // match once regions have been skipped.
+    if (!_expectedHash.isEmpty())
+        return _writeFile(buf, len);
+
+    const uint64_t blk = _blockMap->blockSize();
+    if (blk == 0)
+        return _writeFile(buf, len);
+
+    uint64_t pos = static_cast<uint64_t>(_file->Tell());
+    size_t off = 0;
+    size_t processed = 0;
+
+    // Finish any partially written block first, so that from here on the
+    // offset is block-aligned and maps cleanly onto block numbers.
+    if (pos % blk != 0) {
+        const size_t head =
+            static_cast<size_t>(std::min<uint64_t>(blk - (pos % blk), len));
+        if (_writeFile(buf, head) != head)
+            return 0;
+        off += head;
+        pos += head;
+        processed += head;
+    }
+
+    while (off < len) {
+        const size_t avail = len - off;
+
+        // A tail shorter than a block has to be written: whether the rest of
+        // that block is mapped is not knowable from this buffer alone.
+        if (avail < blk) {
+            if (_writeFile(buf + off, avail) != avail)
+                return 0;
+            processed += avail;
+            break;
+        }
+
+        const uint64_t block = pos / blk;
+        const bool mapped = _blockMap->isMappedSequential(block);
+
+        // Coalesce the run of like-for-like blocks into a single write or a
+        // single seek.
+        size_t run = 0;
+        uint64_t probe = block;
+        while (off + run + blk <= len &&
+               _blockMap->isMappedSequential(probe) == mapped) {
+            run += static_cast<size_t>(blk);
+            ++probe;
+        }
+
+        if (mapped) {
+            if (_writeFile(buf + off, run) != run)
+                return 0;
+        } else {
+            if (_file->Seek(pos + run) != rpi_imager::FileError::kSuccess)
+                return 0;
+            _bytesWritten += run;
+        }
+        off += run;
+        pos += run;
+        processed += run;
+    }
+
+    return processed;
+}
+
 size_t DownloadThread::_writeFileZeroSkip(const char *buf, size_t len)
 {
     constexpr size_t BLK = fastboot::SPARSE_BLK_SZ;  // 4096

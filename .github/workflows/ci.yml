@@ -22,11 +22,14 @@ jobs:
       # manager. Homebrew bottles are built for the runner's own OS, so a
       # brew Qt from a macos-26 runner produces frameworks with minos 26 that
       # will not load on any older Mac. The official builds target macOS 12.
+      # 6.8 LTS, not 6.6: Qt 6.6's CMake config still lists the AGL framework,
+      # which current macOS SDKs no longer ship, so linking fails on the
+      # runner. 6.8 dropped that dependency and still targets macOS 12.
       - name: Install Qt (Windows / macOS)
         if: runner.os != 'Linux'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.6.*'
+          version: '6.8.*'
           cache: true
 
       # ---- dependencies ----

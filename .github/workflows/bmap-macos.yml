@@ -49,10 +49,45 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Show what was produced
-        if: always()
+      # Upstream already runs macdeployqt as a POST_BUILD step (with -qmldir, so
+      # the QML import plugins come along), so the bundle should be
+      # self-contained. Prove it rather than assume it: a green build says
+      # nothing about whether the artifact loads on another machine.
+      - name: Smoke-test the .app
         run: |
-          echo "--- app bundles ---"
-          find build -maxdepth 3 -name '*.app' -print 2>/dev/null || true
-          echo "--- executables ---"
-          find build -maxdepth 2 -type f -perm +111 -print 2>/dev/null | head -20 || true
+          APP=build/rpi-imager.app
+          BIN="$APP/Contents/MacOS/rpi-imager"
+          test -x "$BIN"
+
+          echo "--- deployment target ---"
+          otool -l "$BIN" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print "minos", $2; exit}'
+
+          echo "--- references outside the bundle ---"
+          leaked=$(otool -L "$BIN" | tail -n +2 | awk '{print $1}' \
+                   | grep -E '^/(opt|usr/local)/' || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::binary references paths outside the bundle:"
+            echo "$leaked"
+            exit 1
+          fi
+          echo "none"
+
+          echo "--- does it actually load? ---"
+          # --cli --version exits immediately, which is enough to prove every
+          # framework resolves; it does not exercise the QML plugins.
+          "$BIN" --cli --version
+
+      - name: Sign and package
+        run: |
+          APP=build/rpi-imager.app
+          # Ad-hoc signature so it launches locally without a developer ID.
+          codesign --force --deep --sign - "$APP" 2>/dev/null || true
+          (cd build && zip -qr ../rpi-imager-macOS.zip rpi-imager.app)
+          ls -lh rpi-imager-macOS.zip
+
+      - name: Upload .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpi-imager-macOS
+          path: rpi-imager-macOS.zip
+          if-no-files-found: error

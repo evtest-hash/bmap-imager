@@ -52,7 +52,9 @@ bool isImageOrBmapPath(const QString& lowerPath) {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("BmapImager"));
-    resize(620, 390);
+    // Sized so the content fills it: the stretch below only takes over when
+    // the user makes the window taller.
+    resize(620, 340);
 
     imageEdit_ = new QLineEdit;
     imageEdit_->setReadOnly(true);

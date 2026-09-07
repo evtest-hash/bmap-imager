@@ -80,8 +80,16 @@ jobs:
         run: |
           $exe = "build/src/ui/Release/bmapimager.exe"
           if (-not (Test-Path $exe)) { $exe = "build/src/ui/bmapimager.exe" }
-          & $exe -platform offscreen --screenshot "ui-Windows.png"
-          if ($LASTEXITCODE -ne 0) { throw "screenshot failed ($LASTEXITCODE)" }
+          # Use the real windows plugin: the offscreen one has no font database
+          # on Windows and renders every glyph as .notdef. Fall back to
+          # offscreen (pointed at the system fonts) if there is no desktop.
+          & $exe --screenshot "ui-Windows.png"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "windows plugin failed ($LASTEXITCODE); retrying offscreen"
+            $env:QT_QPA_FONTDIR = "C:\Windows\Fonts"
+            & $exe -platform offscreen --screenshot "ui-Windows.png"
+            if ($LASTEXITCODE -ne 0) { throw "screenshot failed ($LASTEXITCODE)" }
+          }
 
       - name: Upload UI screenshot
         uses: actions/upload-artifact@v4
